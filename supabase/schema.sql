@@ -125,11 +125,7 @@ create policy "Allow public insert on wishes"
   on public.wishes for insert
   with check (true);
 
--- Updates allowed only via like_wish RPC (or controlled like update)
-create policy "Allow public update likes on wishes"
-  on public.wishes for update
-  using (true)
-  with check (true);
+-- Likes must only be updated through the like_wish(target_wish_id) security definer RPC
 
 -- GPL STATS POLICIES
 -- Anyone can read global hits
@@ -148,10 +144,7 @@ create policy "Allow public insert on material_claims"
   on public.material_claims for insert
   with check (true);
 
--- Anyone can unclaim material
-create policy "Allow public delete on material_claims"
-  on public.material_claims for delete
-  using (true);
+-- Anonymous/public visitors cannot delete material claims
 
 -- ==============================================================================
 -- REALTIME PUBLICATION SETUP
