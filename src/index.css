@@ -1,10 +1,16 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    color: #0f172a;
-    background-color: #090d16;
+    color: #f1f5f9;
+    background-color: #030712;
+    overflow-x: hidden;
   }
 }
 
@@ -17,15 +23,85 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Subtle Tactical Scanner Line */
+@keyframes scannerMove {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.8;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(800%);
+    opacity: 0;
+  }
+}
+
+.animate-scanner {
+  animation: scannerMove 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Ambient Pulse Glow */
 @keyframes pulseGlow {
   0%, 100% {
-    box-shadow: 0 0 25px rgba(239, 68, 68, 0.4), inset 0 0 15px rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 25px rgba(225, 29, 72, 0.3), inset 0 0 15px rgba(225, 29, 72, 0.15);
   }
   50% {
-    box-shadow: 0 0 45px rgba(239, 68, 68, 0.7), inset 0 0 25px rgba(239, 68, 68, 0.35);
+    box-shadow: 0 0 50px rgba(225, 29, 72, 0.6), inset 0 0 25px rgba(225, 29, 72, 0.3);
   }
 }
 
 .animate-pulse-glow {
   animation: pulseGlow 2.5s infinite;
+}
+
+/* Performance: Content visibility for below-the-fold sections */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 700px;
+}
+
+/* Awwwards Subtle Background Grain Texture */
+.bg-tactical-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.bg-radial-spotlight {
+  background: radial-gradient(circle at 50% 20%, rgba(16, 185, 129, 0.05) 0%, rgba(244, 63, 94, 0.04) 40%, transparent 75%);
+}
+
+/* Glass Card Inset & Hover Highlight */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-hover {
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.glass-panel-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 18px 36px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Accessibility: Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

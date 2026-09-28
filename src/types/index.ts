@@ -40,3 +40,39 @@ export interface CountdownTime {
   isExpired: boolean;
   totalSecondsRemaining: number;
 }
+
+// Supabase Database Row Types
+export interface DatabaseParticipant {
+  id: string;
+  name: string;
+  role: string | null;
+  assigned_gear: string | null;
+  eta: string | null;
+  notes: string | null;
+  confirmed: boolean;
+  created_at: string;
+}
+
+export interface DatabaseWish {
+  id: string;
+  author: string;
+  message: string;
+  is_roast: boolean;
+  likes: number;
+  created_at: string;
+}
+
+export interface DatabaseGplStats {
+  id: string;
+  global_hits: number;
+  updated_at: string;
+}
+
+export interface DatabaseMaterialClaim {
+  id: string;
+  material_id: string;
+  claimant_name: string;
+  created_at: string;
+}
+
+export type ConnectionState = 'live' | 'reconnecting' | 'offline';
