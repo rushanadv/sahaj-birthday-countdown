@@ -61,8 +61,11 @@ export default function App() {
 
         {/* Continuous Scroll-Driven Experience */}
         <main className="flex-1">
-          {/* 1. Cinematic Scroll-Driven Video Experience (600vh pinned sequence with 3D live data HUD) */}
+          {/* 1. Cinematic Scroll-Driven Experience: Direct Mouth -> Back Match Cut (380vh) */}
           <CinematicHero
+            soundEnabled={soundEnabled}
+            onToggleSound={toggleSound}
+            onTriggerAlert={triggerRaidSiren}
             onSkipToIntroEnd={scrollToSimulator}
             onOpenSquadModal={scrollToSquad}
           />
