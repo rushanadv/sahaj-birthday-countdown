@@ -33,6 +33,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
   const video1Ref = useRef<HTMLVideoElement>(null);
   const video2Ref = useRef<HTMLVideoElement>(null);
   const occlusionRef = useRef<HTMLDivElement>(null);
+  const countdownRef = useRef<HTMLDivElement>(null);
 
   // Live Supabase telemetry
   const { globalHits } = useGplStats();
@@ -185,6 +186,27 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
       // ========================================================
       const CUT_START = 0.68;
       const CUT_END = 0.72;
+
+      // 0. FRONT COUNTDOWN HUD (Clean early fade out: p in [0.05, 0.14])
+      if (countdownRef.current) {
+        if (currentProgress < 0.05) {
+          countdownRef.current.style.opacity = '1';
+          countdownRef.current.style.transform = 'translate3d(0, 0, 0)';
+          countdownRef.current.style.visibility = 'visible';
+          countdownRef.current.style.pointerEvents = 'auto';
+        } else if (currentProgress < 0.14) {
+          const fadeRatio = (currentProgress - 0.05) / (0.14 - 0.05);
+          countdownRef.current.style.opacity = String(1 - fadeRatio);
+          countdownRef.current.style.transform = `translate3d(0, ${fadeRatio * 14}px, 0)`;
+          countdownRef.current.style.visibility = 'visible';
+          countdownRef.current.style.pointerEvents = 'none';
+        } else {
+          countdownRef.current.style.opacity = '0';
+          countdownRef.current.style.transform = 'translate3d(0, 14px, 0)';
+          countdownRef.current.style.visibility = 'hidden';
+          countdownRef.current.style.pointerEvents = 'none';
+        }
+      }
 
       // 1. VIDEO 1 (FRONT -> MOUTH APPROACH)
       if (v1) {
@@ -494,8 +516,8 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         {/* ======================================================== */}
         {/* RIGHT EDGE: MINIMAL 3-STEP PROGRESS INDICATOR */}
         {/* ======================================================== */}
-        <div className="hidden sm:flex absolute right-6 top-1/2 -translate-y-1/2 z-30 flex-col items-end gap-3 font-mono text-[10px] tracking-widest text-slate-500 pointer-events-none select-none">
-          <span className={scrollProgress < 0.68 ? 'text-white font-bold' : ''}>
+        <div className="hidden sm:flex absolute right-6 top-1/2 -translate-y-1/2 z-30 flex-col items-end gap-3 font-mono text-[10px] tracking-widest text-slate-500/50 pointer-events-none select-none">
+          <span className={scrollProgress < 0.68 ? 'text-white font-bold' : 'text-slate-400/30'}>
             01 — SAHAJ
           </span>
           <div className="w-[1px] h-8 bg-white/15 relative overflow-hidden">
@@ -506,7 +528,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               }}
             />
           </div>
-          <span className={scrollProgress >= 0.68 && scrollProgress < 0.94 ? 'text-emerald-400 font-bold' : ''}>
+          <span className={scrollProgress >= 0.68 && scrollProgress < 0.94 ? 'text-emerald-400 font-bold' : 'text-slate-400/30'}>
             02 — BEHIND
           </span>
           <div className="w-[1px] h-8 bg-white/15 relative overflow-hidden">
@@ -521,22 +543,27 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
               }}
             />
           </div>
-          <span className={scrollProgress >= 0.94 ? 'text-white font-bold' : ''}>
+          <span className={scrollProgress >= 0.94 ? 'text-white font-bold' : 'text-slate-400/30'}>
             03 — GPL
           </span>
         </div>
 
         {/* ======================================================== */}
-        {/* FRONT STAGE: PROMINENT COUNTDOWN HUD (0.00 - 0.65) */}
+        {/* FRONT STAGE: COUNTDOWN HUD (Left negative space desktop / bottom-center mobile) */}
+        {/* Completely fades out early between p = 0.05 and p = 0.14 */}
         {/* ======================================================== */}
         <div
-          className="absolute inset-x-0 top-24 sm:top-28 z-20 flex flex-col items-center justify-center pointer-events-none transition-all duration-500 px-4"
-          style={{
-            opacity: scrollProgress < 0.58 ? 1 : Math.max(0, 1 - (scrollProgress - 0.58) / 0.08),
-            transform: `translate3d(0, ${scrollProgress * -25}px, 0)`,
-          }}
+          className="absolute z-20 pointer-events-none select-none
+                     bottom-[8svh] left-1/2 -translate-x-1/2
+                     md:bottom-auto md:left-[clamp(32px,7vw,120px)] md:top-[62%] md:-translate-y-1/2 md:translate-x-0"
         >
-          <CountdownHUD variant="hero" />
+          <div
+            ref={countdownRef}
+            className="pointer-events-auto transition-none"
+            style={{ willChange: 'opacity, transform' }}
+          >
+            <CountdownHUD variant="hero" />
+          </div>
         </div>
 
         {/* ======================================================== */}
