@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useGplStats } from '../hooks/useGplStats';
 import { useParticipants } from '../hooks/useParticipants';
-import { useMaterials } from '../hooks/useMaterials';
 import { useWishes } from '../hooks/useWishes';
 import { CountdownHUD } from './CountdownHUD';
 import { TargetStar } from './TargetStar';
@@ -21,6 +20,14 @@ const VIDEO_2_START_OFFSET = 5.00;
 // MAXIMUM TIME FOR VIDEO 1 BEFORE THE MOUTH DARKNESS BECOMES TUNNEL
 const VIDEO_1_MAX_TIME = 5.40;
 
+// MATH UTILITIES
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smoothstep = (min: number, max: number, value: number) => {
+  const x = clamp01((value - min) / (max - min));
+  return x * x * (3 - 2 * x);
+};
+
 export const CinematicHero: React.FC<CinematicHeroProps> = ({
   soundEnabled,
   onToggleSound,
@@ -34,20 +41,43 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
   const video2Ref = useRef<HTMLVideoElement>(null);
   const occlusionRef = useRef<HTMLDivElement>(null);
   const countdownRef = useRef<HTMLDivElement>(null);
+  const bottomDissolveRef = useRef<HTMLDivElement>(null);
+
+  // Right-side progress indicator refs (updated via RAF, zero React re-render)
+  const step1FillRef = useRef<HTMLDivElement>(null);
+  const step2FillRef = useRef<HTMLDivElement>(null);
+  const step1TextRef = useRef<HTMLSpanElement>(null);
+  const step2TextRef = useRef<HTMLSpanElement>(null);
+  const step3TextRef = useRef<HTMLSpanElement>(null);
+
+  // Back stage live-data refs (updated via RAF with smoothstep)
+  const backStageRef = useRef<HTMLDivElement>(null);
+  const backAnnotationRef = useRef<HTMLDivElement>(null);
+  const stage2Ref = useRef<HTMLDivElement>(null);
+  const stage3Ref = useRef<HTMLDivElement>(null);
+  const stage4Ref = useRef<HTMLDivElement>(null);
+  const stage5Ref = useRef<HTMLDivElement>(null);
+
+  // Master RAF and timeline refs
+  const targetProgressRef = useRef(0);
+  const currentProgressRef = useRef(0);
+  const velocityRef = useRef(0);
+  const v1TimeRef = useRef(0);
+  const v2TimeRef = useRef(VIDEO_2_START_OFFSET);
+  const v1SeekingRef = useRef(false);
+  const v2SeekingRef = useRef(false);
+  const v2DurationRef = useRef(7.98);
+  const isGpuActiveRef = useRef(false);
 
   // Live Supabase telemetry
   const { globalHits } = useGplStats();
   const { participants } = useParticipants();
   const { wishes } = useWishes();
 
-  // Loading & accessibility states
+  // Loading & accessibility states (Only discrete state, never updated per scroll frame)
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(20);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-
-  // Active HUD stage for back scene (0 = front, 1 = back intro, 2 = squad, 3 = hits, 4 = raid directive, 5 = morph)
-  const [hudStage, setHudStage] = useState(0);
-  const [scrollProgress, setScrollProgress] = useState(0);
 
   // Reduced motion detection
   useEffect(() => {
@@ -72,7 +102,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         setLoadProgress(100);
         setTimeout(() => {
           if (mounted) setIsLoaded(true);
-        }, 200);
+        }, 150);
       } else if (v1Ready || v2Ready) {
         setLoadProgress(70);
       }
@@ -88,11 +118,16 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
     const onV2Meta = () => {
       v2Ready = true;
-      if (v2 && v2.currentTime < VIDEO_2_START_OFFSET) {
-        try {
-          v2.currentTime = VIDEO_2_START_OFFSET;
-        } catch {
-          // ignore
+      if (v2) {
+        if (v2.duration && !isNaN(v2.duration)) {
+          v2DurationRef.current = v2.duration;
+        }
+        if (v2.currentTime < VIDEO_2_START_OFFSET) {
+          try {
+            v2.currentTime = VIDEO_2_START_OFFSET;
+          } catch {
+            // ignore
+          }
         }
       }
       checkReady();
@@ -105,6 +140,9 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     if (v2) {
       if (v2.readyState >= 1) {
         v2Ready = true;
+        if (v2.duration && !isNaN(v2.duration)) {
+          v2DurationRef.current = v2.duration;
+        }
         try {
           v2.currentTime = VIDEO_2_START_OFFSET;
         } catch {}
@@ -117,7 +155,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
     const fallback = setTimeout(() => {
       if (mounted) setIsLoaded(true);
-    }, 2200);
+    }, 2000);
 
     return () => {
       mounted = false;
@@ -127,7 +165,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     };
   }, []);
 
-  // iOS Safari decoder warm-up
+  // iOS Safari decoder warm-up on initial touch/click
   const warmUpVideos = useCallback(() => {
     const v1 = video1Ref.current;
     const v2 = video2Ref.current;
@@ -145,166 +183,300 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
   }, []);
 
   // ========================================================
-  // SINGLE RAF LERP SCROLL TIMELINE (NO TUNNEL)
+  // MASTER VELOCITY-AWARE RAF SCROLL ENGINE (ZERO REACT RERENDERS)
   // ========================================================
   useEffect(() => {
     if (prefersReducedMotion) return;
 
     let animationFrameId: number;
-    let currentProgress = 0;
-    let targetProgress = 0;
-    let lastHudStage = 0;
+    let cachedContainerTop = 0;
+    let cachedTotalScrollable = 1;
 
     const v1 = video1Ref.current;
     const v2 = video2Ref.current;
     const occlusion = occlusionRef.current;
 
-    const updateScrollTarget = () => {
+    // Cache layout dimensions to prevent getBoundingClientRect() during scroll
+    const measureLayout = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      const totalScrollable = containerRef.current.offsetHeight - window.innerHeight;
-      if (totalScrollable <= 0) return;
-
-      const scrolled = -rect.top;
-      const p = Math.max(0, Math.min(1, scrolled / totalScrollable));
-      targetProgress = p;
+      cachedContainerTop = window.scrollY + rect.top;
+      cachedTotalScrollable = Math.max(1, containerRef.current.offsetHeight - window.innerHeight);
     };
 
+    // Fast scroll target update - reads only window.scrollY without triggering layout
+    const updateScrollTarget = () => {
+      const scrolled = window.scrollY - cachedContainerTop;
+      targetProgressRef.current = clamp01(scrolled / cachedTotalScrollable);
+    };
+
+    // Seeking unlock handlers
+    const onV1Seeked = () => { v1SeekingRef.current = false; };
+    const onV2Seeked = () => { v2SeekingRef.current = false; };
+    if (v1) v1.addEventListener('seeked', onV1Seeked);
+    if (v2) v2.addEventListener('seeked', onV2Seeked);
+
+    // Coordinate with requestVideoFrameCallback where supported
+    let rvfc1Id: number | null = null;
+    let rvfc2Id: number | null = null;
+    if (v1 && typeof (v1 as any).requestVideoFrameCallback === 'function') {
+      const onV1Rvfc = () => {
+        v1SeekingRef.current = false;
+        if (v1) rvfc1Id = (v1 as any).requestVideoFrameCallback(onV1Rvfc);
+      };
+      rvfc1Id = (v1 as any).requestVideoFrameCallback(onV1Rvfc);
+    }
+    if (v2 && typeof (v2 as any).requestVideoFrameCallback === 'function') {
+      const onV2Rvfc = () => {
+        v2SeekingRef.current = false;
+        if (v2) rvfc2Id = (v2 as any).requestVideoFrameCallback(onV2Rvfc);
+      };
+      rvfc2Id = (v2 as any).requestVideoFrameCallback(onV2Rvfc);
+    }
+
+    // MATCH CUT CONFIGURATION
+    const CUT_START = 0.68;
+    const CUT_END = 0.72;
+    const SEEK_THRESHOLD = 0.024; // 24ms seek threshold prevents decoder choking
+    const VIDEO_SMOOTHING = 0.28;  // Video time follow responsiveness
+
+    // Master 60fps render loop
     const renderLoop = () => {
-      const delta = targetProgress - currentProgress;
-      if (Math.abs(delta) > 0.0001) {
-        currentProgress += delta * 0.14; // smooth responsive lerp
+      const target = targetProgressRef.current;
+      const current = currentProgressRef.current;
+      const delta = target - current;
+      const absDelta = Math.abs(delta);
+
+      velocityRef.current = absDelta;
+
+      // Velocity-aware smoothing:
+      // Slow micro-scrolls: ~0.075 (smooth, steady, no stepping)
+      // Normal scrolls: ~0.095 (responsive)
+      // Fast flicks: ~0.135 (quick catchup without floatiness)
+      const speedFactor = Math.min(1, absDelta * 7.5);
+      const smoothing = 0.075 + speedFactor * 0.06;
+
+      if (absDelta > 0.00003) {
+        currentProgressRef.current += delta * smoothing;
       } else {
-        currentProgress = targetProgress;
+        currentProgressRef.current = target;
+      }
+
+      const p = currentProgressRef.current;
+
+      // GPU Compositing will-change management (Only active when inside cinematic scrub)
+      const isScrubbing = p > 0.005 && p < 0.995;
+      if (isScrubbing !== isGpuActiveRef.current) {
+        isGpuActiveRef.current = isScrubbing;
+        const willChangeVal = isScrubbing ? 'opacity, transform' : 'auto';
+        if (v1) v1.style.willChange = willChangeVal;
+        if (v2) v2.style.willChange = willChangeVal;
+        if (countdownRef.current) countdownRef.current.style.willChange = willChangeVal;
       }
 
       // ========================================================
-      // TIMELINE CHOREOGRAPHY:
-      // p in [0.00, 0.68): FRONT STAGE (Video 1: 0.0s -> 5.40s)
-      // p in [0.68, 0.72]: OCCLUSION MATCH CUT (100-200ms duration)
-      // p in (0.72, 1.00]: BACK STAGE (Video 2: 5.00s -> 7.98s)
+      // 0. FRONT COUNTDOWN HUD (Smoothstep early fade: p in [0.05, 0.14])
       // ========================================================
-      const CUT_START = 0.68;
-      const CUT_END = 0.72;
-
-      // 0. FRONT COUNTDOWN HUD (Clean early fade out: p in [0.05, 0.14])
       if (countdownRef.current) {
-        if (currentProgress < 0.05) {
-          countdownRef.current.style.opacity = '1';
-          countdownRef.current.style.transform = 'translate3d(0, 0, 0)';
-          countdownRef.current.style.visibility = 'visible';
-          countdownRef.current.style.pointerEvents = 'auto';
-        } else if (currentProgress < 0.14) {
-          const fadeRatio = (currentProgress - 0.05) / (0.14 - 0.05);
-          countdownRef.current.style.opacity = String(1 - fadeRatio);
-          countdownRef.current.style.transform = `translate3d(0, ${fadeRatio * 14}px, 0)`;
-          countdownRef.current.style.visibility = 'visible';
-          countdownRef.current.style.pointerEvents = 'none';
-        } else {
-          countdownRef.current.style.opacity = '0';
-          countdownRef.current.style.transform = 'translate3d(0, 14px, 0)';
-          countdownRef.current.style.visibility = 'hidden';
-          countdownRef.current.style.pointerEvents = 'none';
-        }
+        const fade = smoothstep(0.05, 0.14, p);
+        countdownRef.current.style.opacity = String(1 - fade);
+        countdownRef.current.style.transform = `translate3d(0, ${fade * 14}px, 0)`;
+        countdownRef.current.style.visibility = fade >= 0.99 ? 'hidden' : 'visible';
+        countdownRef.current.style.pointerEvents = fade > 0.1 ? 'none' : 'auto';
       }
 
-      // 1. VIDEO 1 (FRONT -> MOUTH APPROACH)
+      // ========================================================
+      // 1. VIDEO 1 (FRONT PORTRAIT -> MOUTH APPROACH)
+      // ========================================================
       if (v1) {
-        if (currentProgress < CUT_START) {
-          // Map 0 -> CUT_START linearly to 0.0s -> VIDEO_1_MAX_TIME
-          const t1 = Math.min(VIDEO_1_MAX_TIME, (currentProgress / CUT_START) * VIDEO_1_MAX_TIME);
-          if (Math.abs(v1.currentTime - t1) > 0.03 && v1.readyState >= 2) {
-            v1.currentTime = t1;
+        if (p < CUT_START) {
+          const targetV1Time = Math.min(VIDEO_1_MAX_TIME, (p / CUT_START) * VIDEO_1_MAX_TIME);
+          v1TimeRef.current += (targetV1Time - v1TimeRef.current) * VIDEO_SMOOTHING;
+          if (v1.readyState >= 2 && !v1SeekingRef.current) {
+            if (Math.abs(v1.currentTime - v1TimeRef.current) > SEEK_THRESHOLD) {
+              v1SeekingRef.current = true;
+              v1.currentTime = v1TimeRef.current;
+              setTimeout(() => { v1SeekingRef.current = false; }, 50);
+            }
           }
           v1.style.opacity = '1';
-        } else if (currentProgress >= CUT_END) {
+        } else if (p >= CUT_END) {
           v1.style.opacity = '0';
-          v1.currentTime = VIDEO_1_MAX_TIME;
+          v1TimeRef.current = VIDEO_1_MAX_TIME;
+          if (v1.readyState >= 2 && Math.abs(v1.currentTime - VIDEO_1_MAX_TIME) > 0.05 && !v1SeekingRef.current) {
+            v1SeekingRef.current = true;
+            v1.currentTime = VIDEO_1_MAX_TIME;
+            setTimeout(() => { v1SeekingRef.current = false; }, 50);
+          }
         } else {
-          // Inside occlusion cut: fade 1 -> 0
-          const ratio = (currentProgress - CUT_START) / (CUT_END - CUT_START);
+          // Inside occlusion match cut (0.68 -> 0.72)
+          const ratio = (p - CUT_START) / (CUT_END - CUT_START);
           v1.style.opacity = String(1 - ratio);
-          v1.currentTime = VIDEO_1_MAX_TIME;
+          v1TimeRef.current = VIDEO_1_MAX_TIME;
+          if (v1.readyState >= 2 && Math.abs(v1.currentTime - VIDEO_1_MAX_TIME) > 0.05 && !v1SeekingRef.current) {
+            v1SeekingRef.current = true;
+            v1.currentTime = VIDEO_1_MAX_TIME;
+            setTimeout(() => { v1SeekingRef.current = false; }, 50);
+          }
         }
       }
 
-      // 2. VIDEO 2 (SAHAJ FROM BEHIND - NEVER SEEKS TUNNEL)
+      // ========================================================
+      // 2. VIDEO 2 (SAHAJ FROM BEHIND - NEVER SEEKS TUNNEL 0-5s)
+      // ========================================================
       if (v2) {
-        if (currentProgress <= CUT_START) {
+        const v2Dur = v2DurationRef.current || 7.98;
+        if (p <= CUT_START) {
           v2.style.opacity = '0';
-          // Strictly clamp at VIDEO_2_START_OFFSET! Never seek below this!
-          if (Math.abs(v2.currentTime - VIDEO_2_START_OFFSET) > 0.05 && v2.readyState >= 2) {
+          v2TimeRef.current = VIDEO_2_START_OFFSET;
+          if (v2.readyState >= 2 && Math.abs(v2.currentTime - VIDEO_2_START_OFFSET) > 0.05 && !v2SeekingRef.current) {
+            v2SeekingRef.current = true;
             v2.currentTime = VIDEO_2_START_OFFSET;
+            setTimeout(() => { v2SeekingRef.current = false; }, 50);
           }
-        } else if (currentProgress < CUT_END) {
-          // Inside occlusion cut: fade 0 -> 1 while sitting at clean back start frame
-          const ratio = (currentProgress - CUT_START) / (CUT_END - CUT_START);
+        } else if (p < CUT_END) {
+          const ratio = (p - CUT_START) / (CUT_END - CUT_START);
           v2.style.opacity = String(ratio);
-          v2.currentTime = VIDEO_2_START_OFFSET;
+          v2TimeRef.current = VIDEO_2_START_OFFSET;
+          if (v2.readyState >= 2 && Math.abs(v2.currentTime - VIDEO_2_START_OFFSET) > 0.05 && !v2SeekingRef.current) {
+            v2SeekingRef.current = true;
+            v2.currentTime = VIDEO_2_START_OFFSET;
+            setTimeout(() => { v2SeekingRef.current = false; }, 50);
+          }
         } else {
-          // Back scene progression: 5.00s -> 7.98s
           v2.style.opacity = '1';
-          const backProgress = (currentProgress - CUT_END) / (1 - CUT_END);
-          const t2 = Math.min(
-            7.98,
-            Math.max(VIDEO_2_START_OFFSET, VIDEO_2_START_OFFSET + backProgress * (7.98 - VIDEO_2_START_OFFSET))
+          const backProgress = (p - CUT_END) / (1 - CUT_END);
+          const targetV2Time = Math.min(
+            v2Dur,
+            Math.max(VIDEO_2_START_OFFSET, VIDEO_2_START_OFFSET + backProgress * (v2Dur - VIDEO_2_START_OFFSET))
           );
-          if (Math.abs(v2.currentTime - t2) > 0.03 && v2.readyState >= 2) {
-            v2.currentTime = t2;
+          v2TimeRef.current += (targetV2Time - v2TimeRef.current) * VIDEO_SMOOTHING;
+          if (v2.readyState >= 2 && !v2SeekingRef.current) {
+            if (Math.abs(v2.currentTime - v2TimeRef.current) > SEEK_THRESHOLD) {
+              v2SeekingRef.current = true;
+              v2.currentTime = v2TimeRef.current;
+              setTimeout(() => { v2SeekingRef.current = false; }, 50);
+            }
           }
         }
       }
 
-      // 3. BRIEF NATURAL BLACK OCCLUSION OVERLAY
+      // ========================================================
+      // 3. BRIEF NATURAL BLACK OCCLUSION MATCH CUT (0.68 - 0.72)
+      // ========================================================
       if (occlusion) {
-        if (currentProgress >= CUT_START && currentProgress <= CUT_END) {
-          // Bell curve opacity peaking at 0.3 to ensure zero seam or luminance pop
+        if (p >= CUT_START && p <= CUT_END) {
           const mid = (CUT_START + CUT_END) / 2;
-          const dist = Math.abs(currentProgress - mid) / ((CUT_END - CUT_START) / 2);
-          const occOpacity = (1 - dist) * 0.3;
+          const dist = Math.abs(p - mid) / ((CUT_END - CUT_START) / 2);
+          const occOpacity = (1 - dist) * 0.35;
           occlusion.style.opacity = String(occOpacity);
         } else {
           occlusion.style.opacity = '0';
         }
       }
 
-      // 4. DISCRETE HUD STAGES FOR THE BACK SCENE
-      // Stage 0: Front scene (Countdown HUD is active)
-      // Stage 1: Back reveal annotation (0.72 - 0.78)
-      // Stage 2: Live Squad (0.78 - 0.84)
-      // Stage 3: Global GPL hits (0.84 - 0.90)
-      // Stage 4: Raid directive & wishes (0.90 - 0.95)
-      // Stage 5: Target Simulator morph (0.95 - 1.00)
-      let stage = 0;
-      if (currentProgress < CUT_END) stage = 0;
-      else if (currentProgress < 0.78) stage = 1;
-      else if (currentProgress < 0.84) stage = 2;
-      else if (currentProgress < 0.90) stage = 3;
-      else if (currentProgress < 0.95) stage = 4;
-      else stage = 5;
-
-      if (stage !== lastHudStage) {
-        lastHudStage = stage;
-        setHudStage(stage);
+      // ========================================================
+      // 4. RIGHT EDGE 3-STEP PROGRESS INDICATOR
+      // ========================================================
+      if (step1FillRef.current) {
+        step1FillRef.current.style.height = `${Math.min(100, (p / 0.68) * 100)}%`;
       }
-      setScrollProgress(currentProgress);
+      if (step2FillRef.current) {
+        step2FillRef.current.style.height = `${p >= 0.68 ? Math.min(100, ((p - 0.68) / 0.26) * 100) : 0}%`;
+      }
+      if (step1TextRef.current) {
+        step1TextRef.current.className = p < 0.68 ? 'text-white font-bold' : 'text-slate-400/30';
+      }
+      if (step2TextRef.current) {
+        step2TextRef.current.className = p >= 0.68 && p < 0.94 ? 'text-emerald-400 font-bold' : 'text-slate-400/30';
+      }
+      if (step3TextRef.current) {
+        step3TextRef.current.className = p >= 0.94 ? 'text-rose-400 font-bold' : 'text-slate-400/30';
+      }
+
+      // ========================================================
+      // 5. BOTTOM DISSOLVE INTO GPL SIMULATOR
+      // ========================================================
+      if (bottomDissolveRef.current) {
+        const dissolveOp = p > 0.91 ? smoothstep(0.91, 1.0, p) : 0;
+        bottomDissolveRef.current.style.opacity = String(dissolveOp);
+      }
+
+      // ========================================================
+      // 6. BACK STAGE LIVE TELEMETRY IN NEGATIVE SPACE
+      // ========================================================
+      if (backStageRef.current) {
+        const isBackActive = p >= 0.69 && p <= 0.99;
+        backStageRef.current.style.visibility = isBackActive ? 'visible' : 'hidden';
+        backStageRef.current.style.opacity = isBackActive ? '1' : '0';
+      }
+
+      if (backAnnotationRef.current) {
+        const inVal = smoothstep(0.72, 0.76, p);
+        const outVal = 1 - smoothstep(0.94, 0.97, p);
+        const op = inVal * outVal;
+        backAnnotationRef.current.style.opacity = String(op);
+        backAnnotationRef.current.style.transform = `translate3d(0, ${lerp(12, 0, inVal)}px, 0)`;
+      }
+
+      if (stage2Ref.current) {
+        const inVal = smoothstep(0.77, 0.81, p);
+        const outVal = 1 - smoothstep(0.84, 0.87, p);
+        const op = inVal * outVal;
+        stage2Ref.current.style.opacity = String(op);
+        stage2Ref.current.style.transform = `translate3d(${lerp(-24, 0, inVal)}px, 0, 0)`;
+      }
+
+      if (stage3Ref.current) {
+        const inVal = smoothstep(0.83, 0.87, p);
+        const outVal = 1 - smoothstep(0.90, 0.93, p);
+        const op = inVal * outVal;
+        stage3Ref.current.style.opacity = String(op);
+        stage3Ref.current.style.transform = `translate3d(${lerp(24, 0, inVal)}px, 0, 0)`;
+      }
+
+      if (stage4Ref.current) {
+        const inVal = smoothstep(0.89, 0.93, p);
+        const outVal = 1 - smoothstep(0.95, 0.98, p);
+        const op = inVal * outVal;
+        stage4Ref.current.style.opacity = String(op);
+        stage4Ref.current.style.transform = `translate3d(0, ${lerp(14, 0, inVal)}px, 0)`;
+      }
+
+      if (stage5Ref.current) {
+        const op = smoothstep(0.94, 0.99, p);
+        stage5Ref.current.style.opacity = String(op);
+        stage5Ref.current.style.visibility = op > 0.01 ? 'visible' : 'hidden';
+      }
 
       animationFrameId = requestAnimationFrame(renderLoop);
     };
 
+    measureLayout();
+    updateScrollTarget();
+
     window.addEventListener('scroll', updateScrollTarget, { passive: true });
-    window.addEventListener('resize', updateScrollTarget, { passive: true });
+    window.addEventListener('resize', measureLayout, { passive: true });
+    window.addEventListener('orientationchange', measureLayout, { passive: true });
     window.addEventListener('touchstart', warmUpVideos, { passive: true, once: true });
     window.addEventListener('click', warmUpVideos, { passive: true, once: true });
 
-    updateScrollTarget();
     animationFrameId = requestAnimationFrame(renderLoop);
 
     return () => {
       window.removeEventListener('scroll', updateScrollTarget);
-      window.removeEventListener('resize', updateScrollTarget);
+      window.removeEventListener('resize', measureLayout);
+      window.removeEventListener('orientationchange', measureLayout);
       window.removeEventListener('touchstart', warmUpVideos);
       window.removeEventListener('click', warmUpVideos);
+      if (v1) v1.removeEventListener('seeked', onV1Seeked);
+      if (v2) v2.removeEventListener('seeked', onV2Seeked);
+      if (rvfc1Id !== null && v1 && typeof (v1 as any).cancelVideoFrameCallback === 'function') {
+        (v1 as any).cancelVideoFrameCallback(rvfc1Id);
+      }
+      if (rvfc2Id !== null && v2 && typeof (v2 as any).cancelVideoFrameCallback === 'function') {
+        (v2 as any).cancelVideoFrameCallback(rvfc2Id);
+      }
       cancelAnimationFrame(animationFrameId);
     };
   }, [prefersReducedMotion, warmUpVideos]);
@@ -365,12 +537,12 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     <div
       ref={containerRef}
       className="relative w-full bg-[#030712]"
-      style={{ height: '380vh' }}
+      style={{ height: '440vh' }}
     >
-      {/* Pinned 100vh Viewport */}
+      {/* Pinned 100svh Viewport */}
       <div
         ref={stickyRef}
-        className="sticky top-0 h-screen w-full overflow-hidden select-none"
+        className="sticky top-0 h-[100svh] w-full overflow-hidden select-none"
       >
         {/* ======================================================== */}
         {/* MINIMAL PRELOAD SCREEN */}
@@ -411,7 +583,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           style={{
             opacity: 1,
             transform: 'translate3d(0, 0, 0)',
-            willChange: scrollProgress < 0.75 ? 'opacity' : 'auto',
+            backfaceVisibility: 'hidden',
           }}
         />
 
@@ -426,14 +598,14 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           style={{
             opacity: 0,
             transform: 'translate3d(0, 0, 0)',
-            willChange: scrollProgress > 0.65 ? 'opacity' : 'auto',
+            backfaceVisibility: 'hidden',
           }}
         />
 
         {/* Brief Full-Black Occlusion Overlay during mouth match cut */}
         <div
           ref={occlusionRef}
-          className="absolute inset-0 bg-black pointer-events-none transition-opacity duration-75 z-10"
+          className="absolute inset-0 bg-black pointer-events-none z-10 transition-none"
           style={{ opacity: 0 }}
         />
 
@@ -448,11 +620,12 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
         {/* Bottom gradient dissolve as back shot morphs into simulator */}
         <div
-          className="absolute inset-x-0 bottom-0 pointer-events-none z-10 transition-opacity duration-300"
+          ref={bottomDissolveRef}
+          className="absolute inset-x-0 bottom-0 pointer-events-none z-10 transition-none"
           style={{
             height: '35vh',
             background: 'linear-gradient(to top, #030712 25%, transparent 100%)',
-            opacity: scrollProgress > 0.92 ? Math.min(1, (scrollProgress - 0.92) / 0.08) : 0,
+            opacity: 0,
           }}
         />
 
@@ -517,33 +690,27 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         {/* RIGHT EDGE: MINIMAL 3-STEP PROGRESS INDICATOR */}
         {/* ======================================================== */}
         <div className="hidden sm:flex absolute right-6 top-1/2 -translate-y-1/2 z-30 flex-col items-end gap-3 font-mono text-[10px] tracking-widest text-slate-500/50 pointer-events-none select-none">
-          <span className={scrollProgress < 0.68 ? 'text-white font-bold' : 'text-slate-400/30'}>
+          <span ref={step1TextRef} className="text-white font-bold transition-colors duration-150">
             01 — SAHAJ
           </span>
           <div className="w-[1px] h-8 bg-white/15 relative overflow-hidden">
             <div
-              className="w-full bg-rose-500 transition-all duration-75"
-              style={{
-                height: `${Math.min(100, (scrollProgress / 0.68) * 100)}%`,
-              }}
+              ref={step1FillRef}
+              className="w-full bg-rose-500 transition-none"
+              style={{ height: '0%' }}
             />
           </div>
-          <span className={scrollProgress >= 0.68 && scrollProgress < 0.94 ? 'text-emerald-400 font-bold' : 'text-slate-400/30'}>
+          <span ref={step2TextRef} className="text-slate-400/30 transition-colors duration-150">
             02 — BEHIND
           </span>
           <div className="w-[1px] h-8 bg-white/15 relative overflow-hidden">
             <div
-              className="w-full bg-emerald-400 transition-all duration-75"
-              style={{
-                height: `${
-                  scrollProgress >= 0.68
-                    ? Math.min(100, ((scrollProgress - 0.68) / 0.26) * 100)
-                    : 0
-                }%`,
-              }}
+              ref={step2FillRef}
+              className="w-full bg-emerald-400 transition-none"
+              style={{ height: '0%' }}
             />
           </div>
-          <span className={scrollProgress >= 0.94 ? 'text-white font-bold' : 'text-slate-400/30'}>
+          <span ref={step3TextRef} className="text-slate-400/30 transition-colors duration-150">
             03 — GPL
           </span>
         </div>
@@ -560,114 +727,105 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
           <div
             ref={countdownRef}
             className="pointer-events-auto transition-none"
-            style={{ willChange: 'opacity, transform' }}
+            style={{ willChange: 'opacity, transform', backfaceVisibility: 'hidden' }}
           >
             <CountdownHUD variant="hero" />
           </div>
         </div>
 
         {/* ======================================================== */}
-        {/* BACK STAGE: RESTRAINED LIVE DATA IN NEGATIVE SPACE (0.72 - 0.95) */}
+        {/* BACK STAGE: RESTRAINED LIVE DATA IN NEGATIVE SPACE (0.70 - 0.98) */}
         {/* ======================================================== */}
-        {scrollProgress >= 0.70 && (
-          <div className="absolute inset-0 z-20 pointer-events-none p-6 sm:p-12 flex flex-col justify-between">
-            
-            {/* Top Annotation Bar (Subject + Compact Countdown) */}
-            <div
-              className="flex items-center justify-between pt-14 sm:pt-16 transition-all duration-300"
-              style={{
-                opacity: hudStage >= 1 && hudStage <= 4 ? 1 : 0,
-                transform: `translate3d(0, ${hudStage >= 1 ? 0 : 15}px, 0)`,
-              }}
-            >
-              <div className="font-mono text-xs text-slate-300 bg-black/60 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-md">
-                <span className="text-slate-500">SUBJECT:</span> SAHAJ &bull; R4 914
-              </div>
-
-              <CountdownHUD variant="compact" className="bg-black/60 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-md" />
-            </div>
-
-            {/* Negative Space Story Overlay (One dominant story at a time) */}
-            <div className="flex-1 flex items-center justify-between max-w-5xl mx-auto w-full px-2 sm:px-8">
-              
-              {/* STAGE 2: LIVE ATTENDANCE (Left negative space) */}
-              <div
-                className="transition-all duration-500 text-left max-w-xs"
-                style={{
-                  opacity: hudStage === 2 ? 1 : 0,
-                  transform: `translate3d(${hudStage === 2 ? '0px' : '-20px'}, 0, 0)`,
-                }}
-              >
-                <div className="font-mono text-xs uppercase tracking-widest text-emerald-400 font-bold mb-1">
-                  LIVE ATTENDANCE
-                </div>
-                <div className="font-display text-5xl sm:text-7xl font-black text-white leading-none">
-                  {participants.length || 1}
-                </div>
-                <div className="font-display text-base sm:text-xl font-bold text-emerald-400 uppercase tracking-wider mt-1">
-                  CONFIRMED OPERATIVES
-                </div>
-                {recentNames.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1 font-mono text-[10px] text-slate-300">
-                    {recentNames.map((name, i) => (
-                      <span key={i} className="bg-black/60 px-2 py-0.5 rounded border border-white/10">
-                        &bull; {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* STAGE 3: GLOBAL GPL HITS (Right negative space) */}
-              <div
-                className="transition-all duration-500 text-right max-w-xs ml-auto"
-                style={{
-                  opacity: hudStage === 3 ? 1 : 0,
-                  transform: `translate3d(${hudStage === 3 ? '0px' : '20px'}, 0, 0)`,
-                }}
-              >
-                <div className="font-mono text-xs uppercase tracking-widest text-rose-400 font-bold mb-1">
-                  GLOBAL GPL HITS
-                </div>
-                <div className="font-display text-5xl sm:text-7xl font-black text-white font-tabular leading-none">
-                  {globalHits.toLocaleString()}
-                </div>
-                <div className="font-display text-sm sm:text-lg font-bold text-rose-300 uppercase tracking-wider mt-1">
-                  RECORDED ACROSS DEVICES
-                </div>
-                <div className="mt-2 font-mono text-[10px] text-slate-400">
-                  REALTIME SYNCHRONIZED
-                </div>
-              </div>
-
-            </div>
-
-            {/* STAGE 4: RAID DIRECTIVE & WISHES (Bottom negative space) */}
-            <div
-              className="pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-slate-300 transition-all duration-500"
-              style={{
-                opacity: hudStage === 4 ? 1 : 0,
-                transform: `translate3d(0, ${hudStage === 4 ? 0 : 15}px, 0)`,
-              }}
-            >
-              <div className="bg-black/70 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-md">
-                <span className="text-amber-400 font-bold">11:55 PM</span> ASSEMBLY &bull;{' '}
-                <span className="text-rose-400 font-bold">00:00 AM</span> BREACH &bull;{' '}
-                <span className="text-emerald-400 font-bold">00:05 AM</span> CELEBRATION
-              </div>
-
-              <div className="bg-black/70 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-md">
-                <span className="text-rose-400 font-bold">{wishes.length}</span> LIVE TRANSMISSIONS
-              </div>
-            </div>
-
-          </div>
-        )}
-
-        {/* STAGE 5: MORPH INTO GPL SIMULATOR HINT (0.95 - 1.00) */}
         <div
-          className="absolute inset-x-0 bottom-8 z-20 flex flex-col items-center text-center pointer-events-none transition-opacity duration-300"
-          style={{ opacity: hudStage === 5 ? 1 : 0 }}
+          ref={backStageRef}
+          className="absolute inset-0 z-20 pointer-events-none p-6 sm:p-12 flex flex-col justify-between transition-none select-none"
+          style={{ visibility: 'hidden', opacity: 0 }}
+        >
+          {/* Top Annotation Bar (Subject + Compact Countdown) */}
+          <div
+            ref={backAnnotationRef}
+            className="flex items-center justify-between pt-14 sm:pt-16 transition-none"
+            style={{ opacity: 0, transform: 'translate3d(0, 12px, 0)' }}
+          >
+            <div className="font-mono text-xs text-slate-300 bg-black/60 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-md">
+              <span className="text-slate-500">SUBJECT:</span> SAHAJ &bull; R4 914
+            </div>
+
+            <CountdownHUD variant="compact" className="bg-black/60 px-3 py-1.5 rounded-lg border border-white/10 backdrop-blur-md" />
+          </div>
+
+          {/* Negative Space Story Overlay (Smooth continuous opacity transitions) */}
+          <div className="flex-1 flex items-center justify-between max-w-5xl mx-auto w-full px-2 sm:px-8">
+            {/* STAGE 2: LIVE ATTENDANCE (Left negative space) */}
+            <div
+              ref={stage2Ref}
+              className="text-left max-w-xs transition-none"
+              style={{ opacity: 0, transform: 'translate3d(-24px, 0, 0)' }}
+            >
+              <div className="font-mono text-xs uppercase tracking-widest text-emerald-400 font-bold mb-1">
+                LIVE ATTENDANCE
+              </div>
+              <div className="font-display text-5xl sm:text-7xl font-black text-white leading-none">
+                {participants.length || 1}
+              </div>
+              <div className="font-display text-base sm:text-xl font-bold text-emerald-400 uppercase tracking-wider mt-1">
+                CONFIRMED OPERATIVES
+              </div>
+              {recentNames.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1 font-mono text-[10px] text-slate-300">
+                  {recentNames.map((name, i) => (
+                    <span key={i} className="bg-black/60 px-2 py-0.5 rounded border border-white/10">
+                      &bull; {name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* STAGE 3: GLOBAL GPL HITS (Right negative space) */}
+            <div
+              ref={stage3Ref}
+              className="text-right max-w-xs ml-auto transition-none"
+              style={{ opacity: 0, transform: 'translate3d(24px, 0, 0)' }}
+            >
+              <div className="font-mono text-xs uppercase tracking-widest text-rose-400 font-bold mb-1">
+                GLOBAL GPL HITS
+              </div>
+              <div className="font-display text-5xl sm:text-7xl font-black text-white font-tabular leading-none">
+                {globalHits.toLocaleString()}
+              </div>
+              <div className="font-display text-sm sm:text-lg font-bold text-rose-300 uppercase tracking-wider mt-1">
+                RECORDED ACROSS DEVICES
+              </div>
+              <div className="mt-2 font-mono text-[10px] text-slate-400">
+                REALTIME SYNCHRONIZED
+              </div>
+            </div>
+          </div>
+
+          {/* STAGE 4: RAID DIRECTIVE & WISHES (Bottom negative space) */}
+          <div
+            ref={stage4Ref}
+            className="pb-6 sm:pb-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-slate-300 transition-none"
+            style={{ opacity: 0, transform: 'translate3d(0, 14px, 0)' }}
+          >
+            <div className="bg-black/70 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-md">
+              <span className="text-amber-400 font-bold">11:55 PM</span> ASSEMBLY &bull;{' '}
+              <span className="text-rose-400 font-bold">00:00 AM</span> BREACH &bull;{' '}
+              <span className="text-emerald-400 font-bold">00:05 AM</span> CELEBRATION
+            </div>
+
+            <div className="bg-black/70 px-4 py-2 rounded-xl border border-white/10 backdrop-blur-md">
+              <span className="text-rose-400 font-bold">{wishes.length}</span> LIVE TRANSMISSIONS
+            </div>
+          </div>
+        </div>
+
+        {/* STAGE 5: MORPH INTO GPL SIMULATOR HINT */}
+        <div
+          ref={stage5Ref}
+          className="absolute inset-x-0 bottom-8 z-20 flex flex-col items-center text-center pointer-events-none transition-none"
+          style={{ opacity: 0, visibility: 'hidden' }}
         >
           <div className="font-mono text-xs uppercase tracking-widest text-rose-400 animate-bounce">
             COMMENCING GPL TARGET PRACTICE &darr;

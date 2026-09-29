@@ -25,20 +25,38 @@ export const TopBar: React.FC<TopBarProps> = ({
   const [isPastIntro, setIsPastIntro] = useState(false);
 
   useEffect(() => {
+    let ticking = false;
+    let lastPastIntro = false;
+    let lastSection = 'simulator';
+
     const handleScroll = () => {
-      // Intro container is 380vh. Threshold to reveal sticky nav is around 2.8 viewports
-      const pastIntroThreshold = window.innerHeight * 2.8;
-      setIsPastIntro(window.scrollY >= pastIntroThreshold);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          // Intro container is ~440vh. Threshold to reveal sticky nav is around 3.2 viewports
+          const pastIntro = window.scrollY >= window.innerHeight * 3.2;
+          if (pastIntro !== lastPastIntro) {
+            lastPastIntro = pastIntro;
+            setIsPastIntro(pastIntro);
+          }
 
-      const sections = ['simulator', 'raid-plan', 'squad', 'wishes'];
-      const scrollPos = window.scrollY + 180;
+          if (pastIntro) {
+            const sections = ['simulator', 'raid-plan', 'squad', 'wishes'];
+            const scrollPos = window.scrollY + 180;
 
-      for (let i = sections.length - 1; i >= 0; i--) {
-        const el = document.getElementById(sections[i]);
-        if (el && el.offsetTop <= scrollPos) {
-          setActiveSection(sections[i]);
-          break;
-        }
+            for (let i = sections.length - 1; i >= 0; i--) {
+              const el = document.getElementById(sections[i]);
+              if (el && el.offsetTop <= scrollPos) {
+                if (sections[i] !== lastSection) {
+                  lastSection = sections[i];
+                  setActiveSection(sections[i]);
+                }
+                break;
+              }
+            }
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
     };
 
