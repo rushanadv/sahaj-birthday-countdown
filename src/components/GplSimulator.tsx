@@ -6,6 +6,7 @@ import {
   Trash2,
   Crosshair,
   Upload,
+  Volume2,
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { useGplStats } from '../hooks/useGplStats';
@@ -45,7 +46,7 @@ const WEAPONS = [
     name: 'Chilled Egg',
     icon: '🥚',
     color: '#fbbf24',
-    impactDesc: 'Raw yolk splatter on face',
+    impactDesc: 'Raw yolk splatter',
     damage: '+25 XP',
   },
   {
@@ -53,7 +54,7 @@ const WEAPONS = [
     name: 'Leather Belt',
     icon: '🪢',
     color: '#ef4444',
-    impactDesc: 'Hostel birthday bump slap',
+    impactDesc: 'Hostel birthday bump',
     damage: '+30 XP',
   },
   {
@@ -69,7 +70,7 @@ const WEAPONS = [
     name: 'Hostel Stick',
     icon: '🪵',
     color: '#b45309',
-    impactDesc: 'Traditional wooden tap',
+    impactDesc: 'Wooden strike tap',
     damage: '+25 XP',
   },
   {
@@ -85,7 +86,7 @@ const WEAPONS = [
     name: 'Chocolate Cake',
     icon: '🎂',
     color: '#d97706',
-    impactDesc: 'Truffle frosting cream smash',
+    impactDesc: 'Truffle frosting smash',
     damage: '+40 XP',
   },
   {
@@ -93,7 +94,7 @@ const WEAPONS = [
     name: 'Water Balloon',
     icon: '🎈',
     color: '#38bdf8',
-    impactDesc: 'Hostel corridor splash',
+    impactDesc: 'Corridor splash',
     damage: '+15 XP',
   },
 ];
@@ -190,7 +191,7 @@ export const GplSimulator: React.FC = () => {
         // Impact audio
         playImpactSound(weapon.id);
 
-        // GPU Target Recoil Animation: translate3d + rotate + scale
+        // GPU Target Recoil Animation
         const recoilX = (Math.random() - 0.5) * 8;
         const recoilY = 3 + Math.random() * 5;
         const recoilR = (Math.random() - 0.5) * 4;
@@ -199,7 +200,7 @@ export const GplSimulator: React.FC = () => {
         if (recoilTimerRef.current) clearTimeout(recoilTimerRef.current);
         recoilTimerRef.current = setTimeout(() => {
           setRecoilStyle({ x: 0, y: 0, rotate: 0, scale: 1 });
-        }, 160);
+        }, 150);
 
         // Add splat decal with capped limit (max 25)
         const newSplat: SplatDecal = {
@@ -343,101 +344,98 @@ export const GplSimulator: React.FC = () => {
   };
 
   return (
-    <section id="simulator" className="py-20 md:py-28 border-t border-slate-900 bg-slate-950 relative overflow-hidden bg-radial-spotlight">
+    <section
+      id="simulator"
+      className="py-20 md:py-32 border-t border-white/5 bg-[#030712] relative overflow-hidden"
+    >
       {/* Background ambient lighting */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[550px] bg-rose-600/10 rounded-full blur-[160px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[850px] h-[600px] bg-rose-950/20 rounded-full blur-[200px] pointer-events-none" />
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 relative">
-        {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-950/60 border border-rose-800/40 text-rose-300 text-xs font-semibold uppercase tracking-wider mb-4">
+        
+        {/* Editorial Section Header */}
+        <div className="text-center max-w-2xl mx-auto space-y-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/90 border border-white/10 font-mono text-[11px] font-bold text-rose-400 uppercase tracking-widest">
             <Crosshair className="w-3.5 h-3.5 text-rose-400" />
-            <span>Interactive Target Practice · Operation R4 914</span>
+            <span>CENTRAL INTERACTIVE ENGINE &bull; R4 914</span>
           </div>
 
-          <h2 className="font-display text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white tracking-tight">
-            GPL Live Target Simulator
+          <h2 className="font-display text-4xl sm:text-6xl font-black text-white tracking-tight">
+            GPL Target Simulator
           </h2>
 
-          <p className="mt-4 text-slate-300 text-sm sm:text-base max-w-2xl mx-auto leading-relaxed">
-            Harmless virtual target practice. Throw eggs, belts, rods, sticks, and chocolate cake directly at Sahaj before the 12:00 AM midnight raid at <strong className="text-rose-400 font-bold">R4 914</strong>!
+          <p className="text-slate-400 text-sm sm:text-base font-light leading-relaxed">
+            Harmless virtual target practice. Throw eggs, belts, rods, and chocolate cake directly at Sahaj before the 12:00 AM midnight raid!
           </p>
         </div>
 
-        {/* Simulator Grid: Mobile puts Target Board first (order-1), Controls second (order-2) */}
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Simulator Grid */}
+        <div className="mt-14 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Target Photo Board & Arena (Right Column on desktop, Top on mobile) */}
+          {/* Main Central Target Area (Desktop: 8 cols, Mobile: order-1) */}
           <div className="lg:col-span-8 flex flex-col items-center order-1 lg:order-2 w-full">
             
-            {/* HUD Status Bar above target */}
-            <div className="w-full max-w-[520px] flex items-center justify-between px-3 mb-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-300 font-mono text-[11px]">
-                <Crosshair className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                <span>CLICK / TAP TARGET OR PRESS SPACE</span>
+            {/* Top Telemetry Bar */}
+            <div className="w-full max-w-[540px] flex items-center justify-between px-2 mb-3 text-xs">
+              <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>TAP TARGET OR PRESS SPACE</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <RealtimeStatus status={connectionStatus} />
                 {combo > 1 && (
-                  <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-extrabold animate-bounce text-xs font-tabular shadow-lg shadow-rose-900/50">
-                    <span>🔥 {combo}× COMBO</span>
-                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-mono font-bold text-xs animate-bounce shadow-lg shadow-rose-950">
+                    &times;{combo} COMBO
+                  </span>
                 )}
               </div>
             </div>
 
-            {/* Target Assembly with GPU-Accelerated Transform Recoil */}
+            {/* Target Canvas with Recoil Animation */}
             <div
               style={{
                 transform: `translate3d(${recoilStyle.x}px, ${recoilStyle.y}px, 0) rotate(${recoilStyle.rotate}deg) scale3d(${recoilStyle.scale}, ${recoilStyle.scale}, 1)`,
                 transition: 'transform 0.08s ease-out',
                 willChange: recoilStyle.scale !== 1 ? 'transform' : 'auto',
               }}
-              className="w-full max-w-[520px] p-2.5 sm:p-3 rounded-[32px] bg-gradient-to-b from-slate-800/90 via-slate-900 to-slate-950 border border-slate-700/60 shadow-2xl shadow-black/80"
+              className="w-full max-w-[540px] p-2.5 sm:p-3 rounded-[32px] bg-gradient-to-b from-slate-900/90 via-slate-950 to-black border border-white/10 shadow-2xl shadow-black/90"
             >
-              {/* Inner Target Chassis with Grid Texture & Scanner */}
               <div
                 ref={photoContainerRef}
                 onClick={handleTargetClick}
-                className="relative w-full aspect-[3/4] rounded-[24px] bg-[#0c1017] border border-white/10 select-none overflow-hidden cursor-crosshair group shadow-inner"
+                className="relative w-full aspect-[3/4] rounded-[24px] bg-[#070b12] border border-white/5 select-none overflow-hidden cursor-crosshair group shadow-inner"
               >
-                {/* Tactical Grid Overlay */}
+                {/* Subtle Grid Overlay */}
                 <div
-                  className="absolute inset-0 opacity-20 pointer-events-none"
+                  className="absolute inset-0 opacity-15 pointer-events-none"
                   style={{
                     backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-                    backgroundSize: '18px 18px',
+                    backgroundSize: '20px 20px',
                   }}
                 />
 
-                {/* Ambient Soft Vignette */}
-                <div className="absolute inset-0 bg-radial-vignette pointer-events-none z-10 opacity-70"
-                     style={{ background: 'radial-gradient(circle at 50% 45%, transparent 50%, rgba(3, 7, 18, 0.75) 100%)' }} />
+                {/* Radar Line */}
+                <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-rose-500/30 to-transparent animate-scanner pointer-events-none z-20" />
 
-                {/* Subtle Radar Scanner Line */}
-                <div className="absolute left-0 right-0 h-1 bg-gradient-to-r from-transparent via-rose-500/40 to-transparent animate-scanner pointer-events-none z-20" />
-
-                {/* Corner Tactical Labels */}
-                <div className="absolute top-3.5 left-3.5 z-20 px-2.5 py-1 rounded-md bg-black/75 border border-slate-700/80 backdrop-blur-md text-[10px] font-mono font-bold tracking-wider text-slate-200">
-                  TARGET: SAHAJ · R4 914
+                {/* Corner Tactical Annotations */}
+                <div className="absolute top-3.5 left-3.5 z-20 px-2.5 py-1 rounded-md bg-black/80 border border-white/10 backdrop-blur-md text-[10px] font-mono font-bold tracking-wider text-slate-300">
+                  TARGET: SAHAJ &bull; R4 914
                 </div>
 
-                <div className="absolute top-3.5 right-3.5 z-20 px-2 py-1 rounded-md bg-black/75 border border-slate-700/80 backdrop-blur-md text-[10px] font-mono text-emerald-400 font-semibold">
-                  ELEVATION: FL 9
+                <div className="absolute top-3.5 right-3.5 z-20 px-2 py-1 rounded-md bg-black/80 border border-white/10 backdrop-blur-md text-[10px] font-mono text-emerald-400 font-semibold">
+                  FL 9 CORRIDOR
                 </div>
 
-                {/* Upper Whitespace & Centered Sahaj Portrait */}
+                {/* Sahaj Portrait */}
                 <div className="relative w-full h-full flex flex-col items-center justify-end overflow-hidden pt-12">
                   <img
                     src={uploadedPhotoUrl || sahajTargetImg}
                     alt="Sahaj - Birthday Target at R4 914"
                     loading="eager"
                     decoding="async"
-                    className="w-[84%] max-h-[92%] object-contain object-bottom pointer-events-none select-none transition-all duration-200 filter drop-shadow-[0_15px_25px_rgba(0,0,0,0.7)]"
-                    style={{
-                      transform: 'translate3d(0, 0, 0)',
-                    }}
+                    className="w-[84%] max-h-[92%] object-contain object-bottom pointer-events-none select-none transition-all duration-200 filter drop-shadow-[0_15px_30px_rgba(0,0,0,0.8)]"
+                    style={{ transform: 'translate3d(0, 0, 0)' }}
                   />
                 </div>
 
@@ -452,7 +450,7 @@ export const GplSimulator: React.FC = () => {
                           position: 'absolute',
                           left: `${splat.x}%`,
                           top: `${splat.y}%`,
-                          transform: `translate3d(-50%, -50%, 0) rotate(${splat.rotation}deg) scale3d(1, 1, 1)`,
+                          transform: `translate3d(-50%, -50%, 0) rotate(${splat.rotation}deg)`,
                           width: `${splat.size}px`,
                           height: `${splat.size}px`,
                           opacity: splat.opacity,
@@ -502,7 +500,7 @@ export const GplSimulator: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Comic Speech Bubbles Layer */}
+                {/* Comic Speech Bubbles */}
                 <div className="absolute inset-0 pointer-events-none z-40">
                   {comicBubbles.map((bubble) => (
                     <div
@@ -513,12 +511,10 @@ export const GplSimulator: React.FC = () => {
                         top: `${bubble.y}%`,
                         transform: 'translate3d(-50%, -100%, 0)',
                       }}
-                      className="animate-in zoom-in duration-150 whitespace-nowrap px-3 py-1 rounded-xl text-white font-extrabold text-[11px] font-display uppercase tracking-wider shadow-2xl border-2 border-white/40 filter drop-shadow-lg"
-                      css-color={bubble.color}
-                      style-bg={bubble.color}
+                      className="animate-in zoom-in duration-150 whitespace-nowrap px-3 py-1 rounded-xl text-white font-extrabold text-[11px] font-display uppercase tracking-wider shadow-2xl filter drop-shadow-lg"
                     >
                       <div
-                        className="px-2.5 py-1 rounded-lg shadow-md"
+                        className="px-2.5 py-1 rounded-lg shadow-md border border-white/30"
                         style={{ backgroundColor: bubble.color }}
                       >
                         {bubble.text}
@@ -527,40 +523,40 @@ export const GplSimulator: React.FC = () => {
                   ))}
                 </div>
 
-                {/* Glass HUD Telemetry Overlay (Bottom) */}
-                <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 backdrop-blur-md text-[11px] font-mono">
+                {/* Bottom Live Telemetry Display */}
+                <div className="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-between p-3 rounded-xl bg-black/80 border border-white/10 backdrop-blur-md text-[11px] font-mono">
                   <div>
-                    <div className="text-slate-400 text-[9px] uppercase tracking-wider">Session Hits</div>
+                    <div className="text-slate-500 text-[9px] uppercase tracking-wider">Session Hits</div>
                     <div className="text-rose-400 font-bold text-sm font-tabular">{sessionHits}</div>
                   </div>
 
                   <div className="text-center">
-                    <div className="text-slate-400 text-[9px] uppercase tracking-wider">Global Hits</div>
+                    <div className="text-slate-500 text-[9px] uppercase tracking-wider">Global Hits (All Visitors)</div>
                     <div className="text-white font-bold text-sm font-tabular">{globalHits.toLocaleString()}</div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-slate-400 text-[9px] uppercase tracking-wider">Combo</div>
-                    <div className="text-amber-400 font-bold text-sm font-tabular">×{combo}</div>
+                    <div className="text-slate-500 text-[9px] uppercase tracking-wider">Combo</div>
+                    <div className="text-amber-400 font-bold text-sm font-tabular">&times;{combo}</div>
                   </div>
                 </div>
 
               </div>
             </div>
 
-            {/* Quick Action Buttons beneath target */}
-            <div className="mt-4 flex items-center justify-center gap-3 w-full max-w-[520px]">
+            {/* Quick Actions Bar */}
+            <div className="mt-4 flex items-center justify-center gap-3 w-full max-w-[540px]">
               <button
                 onClick={handleRapidBarrage}
-                className="flex-1 flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-950/60 active:scale-95"
+                className="flex-1 flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-mono font-bold text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-950/60 active:scale-95"
               >
                 <Zap className="w-4 h-4 fill-white" />
-                <span>Rapid Barrage (7× Salvo)</span>
+                <span>Rapid Barrage (7&times; Salvo)</span>
               </button>
 
               <button
                 onClick={handleCleanPhoto}
-                className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 font-semibold text-xs transition-colors active:scale-95"
+                className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-200 font-mono font-semibold text-xs transition-colors active:scale-95"
                 title="Wash splatters"
               >
                 <RotateCcw className="w-4 h-4 text-emerald-400" />
@@ -569,16 +565,16 @@ export const GplSimulator: React.FC = () => {
             </div>
           </div>
 
-          {/* Left Column: Material Selector & Arsenal Controls (Order-2 on mobile, Order-1 on desktop) */}
+          {/* Left Column: Weapon Selector & Custom Photo (Desktop: 4 cols, Order-2) */}
           <div className="lg:col-span-4 space-y-4 order-2 lg:order-1 w-full">
             
-            {/* Weapon Selector Card */}
-            <div className="p-5 rounded-2xl glass-panel">
+            {/* Ammunition Arsenal Card */}
+            <div className="p-5 rounded-2xl bg-slate-950/80 border border-white/10">
               <div className="flex items-center justify-between mb-3.5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                  Select Throwing Material
+                <span className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Select Material
                 </span>
-                <span className="text-[11px] text-amber-400 font-mono font-semibold">
+                <span className="text-[11px] text-amber-400 font-mono">
                   {WEAPONS.length} Ready
                 </span>
               </div>
@@ -596,11 +592,11 @@ export const GplSimulator: React.FC = () => {
                       className={`min-h-[48px] flex items-center justify-between p-3 rounded-xl text-left transition-all ${
                         isSelected
                           ? 'bg-rose-600/90 text-white shadow-lg shadow-rose-950/80 font-bold border border-rose-400/50 scale-[1.01]'
-                          : 'bg-slate-950/60 text-slate-300 border border-slate-800 hover:border-slate-700 hover:bg-slate-900/80'
+                          : 'bg-slate-900/50 text-slate-300 border border-white/5 hover:border-slate-700 hover:bg-slate-900'
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-2xl p-1 bg-black/30 rounded-lg">{w.icon}</span>
+                        <span className="text-2xl p-1 bg-black/40 rounded-lg">{w.icon}</span>
                         <div>
                           <div className="text-sm font-semibold">{w.name}</div>
                           <div className={`text-[11px] ${isSelected ? 'text-rose-100' : 'text-slate-400'}`}>
@@ -622,9 +618,9 @@ export const GplSimulator: React.FC = () => {
               </div>
             </div>
 
-            {/* Photo Customizer */}
-            <div className="p-5 rounded-2xl glass-panel space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-300">
+            {/* Custom Calibration Upload */}
+            <div className="p-5 rounded-2xl bg-slate-950/80 border border-white/10 space-y-3">
+              <div className="font-mono text-xs font-bold uppercase tracking-wider text-slate-300">
                 Custom Target Calibration
               </div>
 
@@ -639,7 +635,7 @@ export const GplSimulator: React.FC = () => {
               <div className="flex gap-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="min-h-[44px] flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+                  className="min-h-[44px] flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 hover:text-white transition-colors"
                 >
                   <Upload className="w-4 h-4 text-rose-400" />
                   <span>Upload Friend Photo</span>
@@ -648,7 +644,7 @@ export const GplSimulator: React.FC = () => {
                 {uploadedPhotoUrl && (
                   <button
                     onClick={handleResetPhoto}
-                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-950 hover:bg-rose-950/60 border border-slate-700 text-xs text-rose-400 transition-colors"
+                    className="min-h-[44px] px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-rose-950/60 border border-slate-700 text-xs text-rose-400 transition-colors"
                     title="Reset to default Sahaj portrait"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -658,7 +654,7 @@ export const GplSimulator: React.FC = () => {
 
               <p className="text-[11px] text-slate-400 leading-snug">
                 {uploadedPhotoUrl
-                  ? 'Using custom uploaded friend portrait.'
+                  ? 'Custom friend portrait active.'
                   : 'Currently targeting Sahaj (R4 914). You can also upload a friend photo!'}
               </p>
             </div>

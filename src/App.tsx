@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import confetti from 'canvas-confetti';
 import { TopBar } from './components/TopBar';
-import { CountdownHero } from './components/CountdownHero';
-import { MissionDirective } from './components/MissionDirective';
-import { MaterialsArsenal } from './components/MaterialsArsenal';
+import { CinematicHero } from './components/CinematicHero';
 import { GplSimulator } from './components/GplSimulator';
+import { RaidPlan } from './components/RaidPlan';
 import { SquadRoster } from './components/SquadRoster';
 import { WishWall } from './components/WishWall';
 import { Footer } from './components/Footer';
@@ -43,38 +42,45 @@ export default function App() {
     }
   };
 
+  const scrollToSimulator = () => {
+    const el = document.getElementById('simulator');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
     <ToastProvider>
-      <div className="min-h-screen bg-[#030712] text-slate-100 selection:bg-rose-500 selection:text-white flex flex-col bg-tactical-grid">
-        {/* Top Bar with Active Tracking & Audio Controls */}
+      <div className="min-h-screen bg-[#030712] text-slate-100 selection:bg-rose-500 selection:text-white flex flex-col">
+        {/* Dynamic Top Bar (Quiet during cinematic intro, reveals core nav beyond) */}
         <TopBar
           soundEnabled={soundEnabled}
           onToggleSound={toggleSound}
           onTriggerAlert={triggerRaidSiren}
         />
 
-        {/* Main Content Sections */}
+        {/* Continuous Scroll-Driven Experience */}
         <main className="flex-1">
-          {/* Hero with Countdown Clock to 30th September 12:00 AM */}
-          <CountdownHero onOpenSquadModal={scrollToSquad} />
+          {/* 1. Cinematic Scroll-Driven Video Experience (600vh pinned sequence with 3D live data HUD) */}
+          <CinematicHero
+            onSkipToIntroEnd={scrollToSimulator}
+            onOpenSquadModal={scrollToSquad}
+          />
 
-          {/* GPL Live Target Practice Simulator (Placed directly after countdown) */}
+          {/* 2. GPL Live Target Practice Simulator (Centerpiece interactive engine) */}
           <GplSimulator />
 
-          {/* The Exact R4 914 Mission Directive */}
-          <MissionDirective />
+          {/* 3. The Raid Plan (Curated Directive + Milestones + Materials Arsenal) */}
+          <RaidPlan />
 
-          {/* The 5 Required Materials Checklist */}
-          <MaterialsArsenal />
-
-          {/* Strike Squad Roster & Pledge (Realtime Supabase) */}
+          {/* 4. Strike Squad Roster & Pledge (Live Supabase Realtime) */}
           <SquadRoster />
 
-          {/* Wishes and Roasts Wall (Realtime Supabase) */}
+          {/* 5. Transmissions for Sahaj (Realtime Wishes & Roasts) */}
           <WishWall />
         </main>
 
-        {/* Quiet Footer */}
+        {/* Quiet Editorial Footer */}
         <Footer />
 
         {/* Emergency Raid Siren Modal */}
