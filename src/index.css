@@ -13,6 +13,14 @@
   }
 }
 
+/* R4 914 Interactive Landing Portrait Registration & Variables */
+:root {
+  --helmet-state-x: 0%;
+  --helmet-state-y: 1.1%;
+  --helmet-state-scale: 0.93;
+}
+
+
 .font-display {
   font-family: 'Syne', system-ui, sans-serif;
 }

@@ -51,12 +51,33 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
   const step3TextRef = useRef<HTMLSpanElement>(null);
 
   // Back stage live-data refs (updated via RAF with smoothstep)
+  // Back stage live-data refs (updated via RAF with smoothstep)
   const backStageRef = useRef<HTMLDivElement>(null);
   const backAnnotationRef = useRef<HTMLDivElement>(null);
   const stage2Ref = useRef<HTMLDivElement>(null);
   const stage3Ref = useRef<HTMLDivElement>(null);
   const stage4Ref = useRef<HTMLDivElement>(null);
   const stage5Ref = useRef<HTMLDivElement>(null);
+
+  // Interactive landing portrait system refs
+  const portraitWrapperRef = useRef<HTMLDivElement>(null);
+  const layerARef = useRef<HTMLImageElement>(null);
+  const layerBWrapperRef = useRef<HTMLDivElement>(null);
+  const layerBImgRef = useRef<HTMLImageElement>(null);
+  const visorReflectionRef = useRef<HTMLDivElement>(null);
+  const bgArtRef = useRef<SVGSVGElement>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
+
+  // Interactive pointer physics refs (zero React re-renders)
+  const pointerTargetXRef = useRef(0);
+  const pointerTargetYRef = useRef(0);
+  const pointerCurrentXRef = useRef(0);
+  const pointerCurrentYRef = useRef(0);
+  const isPointerInsideRef = useRef(false);
+  const hasInteractedRef = useRef(false);
+  const currentHoverOpacityRef = useRef(0);
+  const debugRegistrationRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Master RAF and timeline refs
   const targetProgressRef = useRef(0);
@@ -182,6 +203,84 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     }
   }, []);
 
+  // Dev-only visual registration tester (Toggle full 50% overlay on 'H')
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'h' || e.key === 'H') {
+        debugRegistrationRef.current = !debugRegistrationRef.current;
+        console.log(
+          `[R4 914 Debug] Registration overlay: ${debugRegistrationRef.current ? 'ACTIVE (opacity 0.5, no mask)' : 'INACTIVE (interactive mask)'}`
+        );
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Pointer & Touch handlers for the landing portrait interaction
+  const handlePointerEnter = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    isPointerInsideRef.current = true;
+    if (portraitWrapperRef.current) {
+      const rect = portraitWrapperRef.current.getBoundingClientRect();
+      pointerTargetXRef.current = e.clientX - rect.left;
+      pointerTargetYRef.current = e.clientY - rect.top;
+    }
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    isPointerInsideRef.current = true;
+    if (portraitWrapperRef.current) {
+      const rect = portraitWrapperRef.current.getBoundingClientRect();
+      pointerTargetXRef.current = e.clientX - rect.left;
+      pointerTargetYRef.current = e.clientY - rect.top;
+    }
+    if (!hasInteractedRef.current) {
+      hasInteractedRef.current = true;
+      if (hintRef.current) hintRef.current.style.opacity = '0';
+    }
+  }, []);
+
+  const handlePointerLeave = useCallback(() => {
+    isPointerInsideRef.current = false;
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (!touchStartRef.current || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+
+    // If primarily vertical gesture, allow native scroll without revealing helmet
+    if (dy > dx * 1.3) {
+      isPointerInsideRef.current = false;
+      return;
+    }
+
+    if (portraitWrapperRef.current) {
+      const rect = portraitWrapperRef.current.getBoundingClientRect();
+      pointerTargetXRef.current = touch.clientX - rect.left;
+      pointerTargetYRef.current = touch.clientY - rect.top;
+      isPointerInsideRef.current = true;
+    }
+    if (!hasInteractedRef.current) {
+      hasInteractedRef.current = true;
+      if (hintRef.current) hintRef.current.style.opacity = '0';
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    touchStartRef.current = null;
+    isPointerInsideRef.current = false;
+  }, []);
+
+
   // ========================================================
   // MASTER VELOCITY-AWARE RAF SCROLL ENGINE (ZERO REACT RERENDERS)
   // ========================================================
@@ -196,12 +295,28 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
     const v2 = video2Ref.current;
     const occlusion = occlusionRef.current;
 
+    let cachedHeroWidth = 1920;
+    let cachedHeroHeight = 1080;
+
+    // Feature detect CSS masking support for graceful crossfade fallback
+    const supportsMask =
+      typeof CSS !== 'undefined' &&
+      (CSS.supports('mask-image', 'radial-gradient(circle, black, transparent)') ||
+        CSS.supports('-webkit-mask-image', 'radial-gradient(circle, black, transparent)'));
+
     // Cache layout dimensions to prevent getBoundingClientRect() during scroll
     const measureLayout = () => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       cachedContainerTop = window.scrollY + rect.top;
       cachedTotalScrollable = Math.max(1, containerRef.current.offsetHeight - window.innerHeight);
+      if (portraitWrapperRef.current) {
+        cachedHeroWidth = portraitWrapperRef.current.offsetWidth || window.innerWidth;
+        cachedHeroHeight = portraitWrapperRef.current.offsetHeight || window.innerHeight;
+      } else {
+        cachedHeroWidth = window.innerWidth;
+        cachedHeroHeight = window.innerHeight;
+      }
     };
 
     // Fast scroll target update - reads only window.scrollY without triggering layout
@@ -272,6 +387,116 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         if (v1) v1.style.willChange = willChangeVal;
         if (v2) v2.style.willChange = willChangeVal;
         if (countdownRef.current) countdownRef.current.style.willChange = willChangeVal;
+      }
+
+      // ========================================================
+      // LANDING INTERACTIVE PORTRAIT SYSTEM (Active only before scrolling)
+      // ========================================================
+      const DISABLE_START = 0.025;
+      const DISABLE_END = 0.065;
+
+      if (portraitWrapperRef.current) {
+        if (p >= DISABLE_END) {
+          // Bypassed completely during cinematic scroll
+          portraitWrapperRef.current.style.opacity = '0';
+          portraitWrapperRef.current.style.visibility = 'hidden';
+          portraitWrapperRef.current.style.pointerEvents = 'none';
+          if (layerBWrapperRef.current) {
+            layerBWrapperRef.current.style.opacity = '0';
+          }
+        } else {
+          portraitWrapperRef.current.style.visibility = 'visible';
+          const isLandingIdle = p <= DISABLE_START;
+          portraitWrapperRef.current.style.pointerEvents = isLandingIdle ? 'auto' : 'none';
+
+          // Seamless scroll fade: 1 when idle, fades to 0 as cinematic starts
+          const scrollFade = isLandingIdle ? 1 : Math.max(0, 1 - (p - DISABLE_START) / (DISABLE_END - DISABLE_START));
+          portraitWrapperRef.current.style.opacity = String(scrollFade);
+
+          if (layerBWrapperRef.current) {
+            if (debugRegistrationRef.current && import.meta.env.DEV) {
+              // Dev visual registration tester: 50% opacity, no mask
+              layerBWrapperRef.current.style.opacity = '0.5';
+              layerBWrapperRef.current.style.maskImage = 'none';
+              layerBWrapperRef.current.style.webkitMaskImage = 'none';
+            } else {
+              // Smooth hover opacity transition (approx 250ms enter, 400ms leave)
+              const targetHover = isPointerInsideRef.current && isLandingIdle ? 1 : 0;
+              const fadeRate = isPointerInsideRef.current ? 0.088 : 0.045;
+              currentHoverOpacityRef.current += (targetHover - currentHoverOpacityRef.current) * fadeRate;
+
+              const effectiveOpacity = currentHoverOpacityRef.current * scrollFade;
+
+              if (effectiveOpacity < 0.005) {
+                layerBWrapperRef.current.style.opacity = '0';
+              } else {
+                layerBWrapperRef.current.style.opacity = String(effectiveOpacity);
+
+                // Inertia pointer interpolation (0.082 factor gives ideal weight)
+                const tx = pointerTargetXRef.current;
+                const ty = pointerTargetYRef.current;
+                pointerCurrentXRef.current += (tx - pointerCurrentXRef.current) * 0.082;
+                pointerCurrentYRef.current += (ty - pointerCurrentYRef.current) * 0.082;
+
+                const cx = pointerCurrentXRef.current;
+                const cy = pointerCurrentYRef.current;
+                const w = cachedHeroWidth || 1920;
+                const h = cachedHeroHeight || 1080;
+
+                // Subtle restrained parallax: normal ±2px, helmet ±3px, background ±6px
+                const normPx = (cx - w * 0.5) / (w * 0.5);
+                const normPy = (cy - h * 0.5) / (h * 0.5);
+
+                if (layerARef.current) {
+                  layerARef.current.style.transform = `translate3d(${(normPx * 2).toFixed(2)}px, ${(normPy * 2).toFixed(2)}px, 0)`;
+                }
+                layerBWrapperRef.current.style.transform = `translate3d(${(normPx * 3).toFixed(2)}px, ${(normPy * 3).toFixed(2)}px, 0)`;
+                if (bgArtRef.current) {
+                  bgArtRef.current.style.transform = `translate3d(${(normPx * 6).toFixed(2)}px, ${(normPy * 6).toFixed(2)}px, 0)`;
+                }
+                if (visorReflectionRef.current) {
+                  visorReflectionRef.current.style.transform = `translate3d(${(normPx * 45).toFixed(1)}px, 0, 0)`;
+                }
+
+                // Proximity prioritization: head/face centered at (w*0.5, h*0.42)
+                const distFromSubject = Math.hypot((cx - w * 0.5) / (w * 0.32), (cy - h * 0.42) / (h * 0.35));
+                const subjectProximity = Math.max(0.18, Math.min(1.0, 1.35 - distFromSubject * 0.85));
+
+                if (supportsMask) {
+                  // 3 Soft Overlapping Organic Lobes with alive time-wobble
+                  const t = performance.now() * 0.0012;
+                  const baseRx = Math.min(w, h) * 0.22 * subjectProximity;
+                  const baseRy = baseRx * 1.18;
+
+                  const rx1 = baseRx;
+                  const ry1 = baseRy;
+                  const l1x = cx + Math.sin(t * 0.8) * 8;
+                  const l1y = cy + Math.cos(t * 0.9) * 8;
+
+                  const rx2 = baseRx * 0.75;
+                  const ry2 = baseRy * 0.82;
+                  const l2x = cx + baseRx * 0.38 + Math.cos(t * 1.1) * 12;
+                  const l2y = cy - baseRy * 0.32 + Math.sin(t * 1.3) * 12;
+
+                  const rx3 = baseRx * 0.70;
+                  const ry3 = baseRy * 0.76;
+                  const l3x = cx - baseRx * 0.35 + Math.sin(t * 1.2) * 10;
+                  const l3y = cy + baseRy * 0.30 + Math.cos(t * 1.0) * 10;
+
+                  const grad1 = `radial-gradient(ellipse ${rx1.toFixed(1)}px ${ry1.toFixed(1)}px at ${l1x.toFixed(1)}px ${l1y.toFixed(1)}px, black 25%, rgba(0,0,0,0.85) 50%, transparent 80%)`;
+                  const grad2 = `radial-gradient(ellipse ${rx2.toFixed(1)}px ${ry2.toFixed(1)}px at ${l2x.toFixed(1)}px ${l2y.toFixed(1)}px, black 20%, rgba(0,0,0,0.7) 48%, transparent 75%)`;
+                  const grad3 = `radial-gradient(ellipse ${rx3.toFixed(1)}px ${ry3.toFixed(1)}px at ${l3x.toFixed(1)}px ${l3y.toFixed(1)}px, black 15%, rgba(0,0,0,0.6) 45%, transparent 72%)`;
+
+                  const maskStr = `${grad1}, ${grad2}, ${grad3}`;
+                  layerBWrapperRef.current.style.maskImage = maskStr;
+                  layerBWrapperRef.current.style.webkitMaskImage = maskStr;
+                } else {
+                  layerBWrapperRef.current.style.opacity = String(effectiveOpacity * subjectProximity);
+                }
+              }
+            }
+          }
+        }
       }
 
       // ========================================================
@@ -454,6 +679,10 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
 
     measureLayout();
     updateScrollTarget();
+    pointerTargetXRef.current = cachedHeroWidth * 0.5;
+    pointerTargetYRef.current = cachedHeroHeight * 0.42;
+    pointerCurrentXRef.current = cachedHeroWidth * 0.5;
+    pointerCurrentYRef.current = cachedHeroHeight * 0.42;
 
     window.addEventListener('scroll', updateScrollTarget, { passive: true });
     window.addEventListener('resize', measureLayout, { passive: true });
@@ -576,6 +805,7 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
         <video
           ref={video1Ref}
           src="/videos/intro-1.mp4"
+          poster="/images/sahaj-normal.jpg"
           preload="auto"
           muted
           playsInline
@@ -601,6 +831,146 @@ export const CinematicHero: React.FC<CinematicHeroProps> = ({
             backfaceVisibility: 'hidden',
           }}
         />
+
+        {/* ======================================================== */}
+        {/* LANDING PORTRAIT SYSTEM (Active only before scrolling, p <= 0.03) */}
+        {/* ======================================================== */}
+        <div
+          ref={portraitWrapperRef}
+          onPointerEnter={handlePointerEnter}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={handlePointerLeave}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className="absolute inset-0 w-full h-full overflow-hidden pointer-events-auto z-[8] select-none"
+          style={{
+            opacity: 1,
+            touchAction: 'pan-y',
+            transition: 'opacity 0.15s ease-out',
+          }}
+        >
+          {/* Subtle Editorial Backlight Spotlight behind Sahaj */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(ellipse 65% 55% at 50% 38%, rgba(244, 63, 94, 0.05) 0%, rgba(15, 23, 42, 0.35) 50%, transparent 80%)',
+              mixBlendMode: 'screen',
+            }}
+          />
+
+          {/* Abstract R4 914 Editorial Background Contours (3-6% Opacity) */}
+          <svg
+            ref={bgArtRef}
+            className="absolute inset-0 w-full h-full pointer-events-none select-none"
+            viewBox="0 0 1920 1080"
+            preserveAspectRatio="xMidYMid slice"
+            style={{
+              opacity: 0.045,
+              transform: 'translate3d(0, 0, 0)',
+              willChange: 'transform',
+            }}
+          >
+            <defs>
+              <linearGradient id="curveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.8" />
+                <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.2" />
+              </linearGradient>
+              <linearGradient id="curveGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#f43f5e" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {/* Dynamic Racing Line Ribbon */}
+            <path
+              d="M -100 850 C 400 900, 750 650, 960 520 C 1200 370, 1550 250, 2050 180"
+              fill="none"
+              stroke="url(#curveGrad1)"
+              strokeWidth="1.5"
+              strokeDasharray="8 6"
+            />
+            {/* Apex Contour Curve */}
+            <path
+              d="M 100 200 C 600 120, 850 300, 960 440 C 1100 620, 1400 950, 1900 1000"
+              fill="none"
+              stroke="url(#curveGrad2)"
+              strokeWidth="1.5"
+            />
+            {/* Subtle 914 Radial Arc */}
+            <circle
+              cx="960"
+              cy="460"
+              r="380"
+              fill="none"
+              stroke="#f43f5e"
+              strokeWidth="1"
+              strokeDasharray="4 12"
+            />
+          </svg>
+
+          {/* LAYER A: Normal Sahaj Hero Portrait */}
+          <img
+            ref={layerARef}
+            src="/images/sahaj-normal.jpg"
+            alt="Sahaj"
+            className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+            style={{
+              transform: 'translate3d(0, 0, 0)',
+              backfaceVisibility: 'hidden',
+              willChange: 'transform',
+            }}
+          />
+
+          {/* LAYER B: Sahaj R4 914 Helmet State (Organic Sculptural Reveal Mask) */}
+          <div
+            ref={layerBWrapperRef}
+            className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-hidden"
+            style={{
+              opacity: 0,
+              maskRepeat: 'no-repeat',
+              WebkitMaskRepeat: 'no-repeat',
+              transform: 'translate3d(0, 0, 0)',
+              backfaceVisibility: 'hidden',
+              willChange: 'opacity, transform',
+            }}
+          >
+            <img
+              ref={layerBImgRef}
+              src="/images/sahaj-helmet-state.jpg"
+              alt="Sahaj R4 914 Motorsport Helmet"
+              className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none select-none"
+              style={{
+                transform:
+                  'translate(var(--helmet-state-x, 0%), var(--helmet-state-y, 1.1%)) scale(var(--helmet-state-scale, 0.93))',
+                transformOrigin: '50% 50%',
+                backfaceVisibility: 'hidden',
+              }}
+            />
+
+            {/* Subtle Visor Reflective Streak Overlay (Masked inside Layer B) */}
+            <div
+              ref={visorReflectionRef}
+              className="absolute inset-0 pointer-events-none opacity-25 mix-blend-screen"
+              style={{
+                background:
+                  'linear-gradient(115deg, transparent 44%, rgba(255,255,255,0.12) 49%, rgba(255,240,245,0.18) 51%, transparent 56%)',
+                transform: 'translate3d(0, 0, 0)',
+                willChange: 'transform',
+              }}
+            />
+          </div>
+
+          {/* Understated Landing Instruction: MOVE TO REVEAL */}
+          <div
+            ref={hintRef}
+            className="absolute bottom-5 sm:bottom-7 left-1/2 -translate-x-1/2 z-20 pointer-events-none select-none transition-opacity duration-700 flex items-center gap-2 font-mono text-[10px] tracking-[0.25em] text-slate-400/70 uppercase"
+            style={{ opacity: 1 }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500/70 animate-pulse" />
+            <span>MOVE TO REVEAL</span>
+          </div>
+        </div>
 
         {/* Brief Full-Black Occlusion Overlay during mouth match cut */}
         <div
