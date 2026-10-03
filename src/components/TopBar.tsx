@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Flame, Menu, X } from 'lucide-react';
+import { Volume2, VolumeX, Flame } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 interface TopBarProps {
@@ -8,26 +8,16 @@ interface TopBarProps {
   onTriggerAlert: () => void;
 }
 
-const NAV_LINKS = [
-  { href: '#simulator', label: 'GPL' },
-  { href: '#raid-plan', label: 'Raid Plan' },
-  { href: '#squad', label: 'Squad' },
-  { href: '#wishes', label: 'Wishes' },
-];
-
 export const TopBar: React.FC<TopBarProps> = ({
   soundEnabled,
   onToggleSound,
   onTriggerAlert,
 }) => {
-  const [activeSection, setActiveSection] = useState('simulator');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isPastIntro, setIsPastIntro] = useState(false);
 
   useEffect(() => {
     let ticking = false;
     let lastPastIntro = false;
-    let lastSection = 'simulator';
 
     const handleScroll = () => {
       if (!ticking) {
@@ -37,22 +27,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           if (pastIntro !== lastPastIntro) {
             lastPastIntro = pastIntro;
             setIsPastIntro(pastIntro);
-          }
-
-          if (pastIntro) {
-            const sections = ['simulator', 'raid-plan', 'squad', 'wishes'];
-            const scrollPos = window.scrollY + 180;
-
-            for (let i = sections.length - 1; i >= 0; i--) {
-              const el = document.getElementById(sections[i]);
-              if (el && el.offsetTop <= scrollPos) {
-                if (sections[i] !== lastSection) {
-                  lastSection = sections[i];
-                  setActiveSection(sections[i]);
-                }
-                break;
-              }
-            }
           }
           ticking = false;
         });
@@ -85,24 +59,14 @@ export const TopBar: React.FC<TopBarProps> = ({
           </a>
         </div>
 
-        {/* 4 Core Editorial Nav Links */}
-        <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-full bg-black/60 border border-white/10 text-xs font-mono">
-          {NAV_LINKS.map((link) => {
-            const isActive = activeSection === link.href.replace('#', '');
-            return (
-              <a
-                key={link.href}
-                href={link.href}
-                className={`px-3.5 py-1.5 rounded-full transition-all duration-150 uppercase tracking-wider ${
-                  isActive
-                    ? 'bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {link.label}
-              </a>
-            );
-          })}
+        {/* GPL Nav Target */}
+        <nav className="flex items-center text-xs font-mono">
+          <a
+            href="#simulator"
+            className="px-3.5 py-1.5 rounded-full bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-bold uppercase tracking-wider transition-all"
+          >
+            GPL
+          </a>
         </nav>
 
         {/* Downstream Actions */}
@@ -135,33 +99,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             <Flame className="w-3.5 h-3.5 fill-white" />
             <span>Siren</span>
           </button>
-
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden min-h-[36px] p-2 text-slate-400 hover:text-white rounded-xl bg-black/60 border border-white/10"
-            aria-label="Toggle navigation"
-          >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
         </div>
 
       </div>
-
-      {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-white/10 bg-[#030712] px-4 py-3 space-y-1 font-mono text-xs animate-in slide-in-from-top-2 duration-150">
-          {NAV_LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-900 uppercase tracking-wider"
-            >
-              {link.label}
-            </a>
-          ))}
-        </div>
-      )}
     </header>
   );
 };

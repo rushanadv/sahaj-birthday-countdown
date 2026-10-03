@@ -3,9 +3,6 @@ import confetti from 'canvas-confetti';
 import { TopBar } from './components/TopBar';
 import { CinematicHero } from './components/CinematicHero';
 import { GplSimulator } from './components/GplSimulator';
-import { RaidPlan } from './components/RaidPlan';
-import { SquadRoster } from './components/SquadRoster';
-import { WishWall } from './components/WishWall';
 import { Footer } from './components/Footer';
 import { ToastProvider } from './context/ToastContext';
 import { sound } from './utils/sound';
@@ -35,13 +32,6 @@ export default function App() {
     });
   };
 
-  const scrollToSquad = () => {
-    const el = document.getElementById('squad');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   const scrollToSimulator = () => {
     const el = document.getElementById('simulator');
     if (el) {
@@ -67,20 +57,10 @@ export default function App() {
             onToggleSound={toggleSound}
             onTriggerAlert={triggerRaidSiren}
             onSkipToIntroEnd={scrollToSimulator}
-            onOpenSquadModal={scrollToSquad}
           />
 
           {/* 2. GPL Live Target Practice Simulator (Centerpiece interactive engine) */}
           <GplSimulator />
-
-          {/* 3. The Raid Plan (Curated Directive + Milestones + Materials Arsenal) */}
-          <RaidPlan />
-
-          {/* 4. Strike Squad Roster & Pledge (Live Supabase Realtime) */}
-          <SquadRoster />
-
-          {/* 5. Transmissions for Sahaj (Realtime Wishes & Roasts) */}
-          <WishWall />
         </main>
 
         {/* Quiet Editorial Footer */}
